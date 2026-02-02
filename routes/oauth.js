@@ -3,34 +3,71 @@ const crypto = require('crypto');
 const router = express.Router();
 const hubspotService = require('../services/hubspot');
 const Portal = require('../models/Portal');
+const OAuthState = require('../models/OAuthState');
 const { generateToken } = require('../middleware/auth');
 
-// Store OAuth states temporarily (in production, use Redis)
-const oauthStates = new Map();
+/**
+ * Escape string for safe embedding in JavaScript
+ * Prevents XSS by escaping characters that could break out of JS strings
+ * @param {string} str - The string to escape
+ * @returns {string} - Escaped string safe for JS embedding
+ */
+function escapeForJs(str) {
+  if (!str) return '';
+  return str
+    .replace(/\\/g, '\\\\')   // Escape backslashes first
+    .replace(/'/g, "\\'")     // Escape single quotes
+    .replace(/"/g, '\\"')     // Escape double quotes
+    .replace(/</g, '\\x3c')   // Escape < to prevent </script> injection
+    .replace(/>/g, '\\x3e')   // Escape >
+    .replace(/\n/g, '\\n')    // Escape newlines
+    .replace(/\r/g, '\\r');   // Escape carriage returns
+}
+
+/**
+ * Escape string for safe embedding in HTML content
+ * @param {string} str - The string to escape
+ * @returns {string} - Escaped string safe for HTML
+ */
+function escapeHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#x27;');
+}
 
 /**
  * Initiate OAuth flow
  * GET /oauth/authorize
  */
-router.get('/authorize', (req, res) => {
-  // Generate state for CSRF protection
-  const state = crypto.randomBytes(16).toString('hex');
+router.get('/authorize', async (req, res) => {
+  try {
+    // Generate state for CSRF protection
+    const state = crypto.randomBytes(16).toString('hex');
 
-  // Store state with timestamp (expires in 10 minutes)
-  oauthStates.set(state, {
-    createdAt: Date.now(),
-    returnUrl: req.query.returnUrl
-  });
+    // Store state in MongoDB (automatically expires after 10 minutes via TTL index)
+    await OAuthState.create({
+      state,
+      returnUrl: req.query.returnUrl
+    });
 
-  // Clean up old states
-  for (const [key, value] of oauthStates.entries()) {
-    if (Date.now() - value.createdAt > 10 * 60 * 1000) {
-      oauthStates.delete(key);
-    }
+    const authUrl = hubspotService.getAuthorizationUrl(state);
+    res.redirect(authUrl);
+  } catch (error) {
+    console.error('OAuth authorize error:', error);
+    res.status(500).send(`
+      <html>
+        <body>
+          <h1>Authorization Failed</h1>
+          <p>Failed to initiate OAuth flow. Please try again.</p>
+          <p><a href="/oauth/authorize">Try again</a></p>
+        </body>
+      </html>
+    `);
   }
-
-  const authUrl = hubspotService.getAuthorizationUrl(state);
-  res.redirect(authUrl);
 });
 
 /**
@@ -43,19 +80,22 @@ router.get('/callback', async (req, res) => {
   // Handle OAuth errors
   if (error) {
     console.error('OAuth error:', error, error_description);
+    const safeErrorMessage = escapeHtml(error_description || error || 'Unknown error');
     return res.status(400).send(`
       <html>
         <body>
           <h1>Authorization Failed</h1>
-          <p>${error_description || error}</p>
+          <p>${safeErrorMessage}</p>
           <p><a href="/oauth/authorize">Try again</a></p>
         </body>
       </html>
     `);
   }
 
-  // Verify state
-  if (!state || !oauthStates.has(state)) {
+  // Verify state from MongoDB
+  const stateData = await OAuthState.findOneAndDelete({ state });
+
+  if (!state || !stateData) {
     return res.status(400).send(`
       <html>
         <body>
@@ -66,9 +106,6 @@ router.get('/callback', async (req, res) => {
       </html>
     `);
   }
-
-  const stateData = oauthStates.get(state);
-  oauthStates.delete(state);
 
   try {
     // Exchange code for tokens
@@ -117,32 +154,38 @@ router.get('/callback', async (req, res) => {
 
     // Redirect to HubSpot or return success page
     if (stateData.returnUrl) {
-      res.redirect(`${stateData.returnUrl}?token=${jwt}`);
+      // Encode token for URL safety
+      res.redirect(`${stateData.returnUrl}?token=${encodeURIComponent(jwt)}`);
     } else {
       // Redirect to frontend with token
       const frontendUrl = process.env.NODE_ENV === 'production'
         ? process.env.BASE_URL
         : 'http://localhost:5173';
 
+      // Escape values to prevent XSS
+      const safeJwt = escapeForJs(jwt);
+      const safePortalId = escapeHtml(String(portal.portalId));
+      const safeFrontendUrl = escapeForJs(frontendUrl);
+
       res.send(`
         <html>
           <body>
             <h1>Successfully Connected!</h1>
             <p>CodeFlow has been installed in your HubSpot portal.</p>
-            <p>Portal ID: ${portal.portalId}</p>
+            <p>Portal ID: ${safePortalId}</p>
             <p>Redirecting to dashboard...</p>
             <script>
               // Store token in localStorage
-              localStorage.setItem('codeflow_token', '${jwt}');
+              localStorage.setItem('codeflow_token', '${safeJwt}');
 
               // If in popup, close and notify parent
               if (window.opener) {
-                window.opener.postMessage({ type: 'OAUTH_SUCCESS', token: '${jwt}' }, '*');
-                window.opener.localStorage.setItem('codeflow_token', '${jwt}');
+                window.opener.postMessage({ type: 'OAUTH_SUCCESS', token: '${safeJwt}' }, '*');
+                window.opener.localStorage.setItem('codeflow_token', '${safeJwt}');
                 window.close();
               } else {
                 // Redirect to frontend dashboard
-                window.location.href = '${frontendUrl}?token=${jwt}';
+                window.location.href = '${safeFrontendUrl}?token=${encodeURIComponent('${safeJwt}')}';
               }
             </script>
           </body>
@@ -151,11 +194,12 @@ router.get('/callback', async (req, res) => {
     }
   } catch (error) {
     console.error('OAuth callback error:', error);
+    const safeErrorMessage = escapeHtml(error.message || 'Unknown error');
     res.status(500).send(`
       <html>
         <body>
           <h1>Connection Failed</h1>
-          <p>Failed to connect to HubSpot: ${error.message}</p>
+          <p>Failed to connect to HubSpot: ${safeErrorMessage}</p>
           <p><a href="/oauth/authorize">Try again</a></p>
         </body>
       </html>

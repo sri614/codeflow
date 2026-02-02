@@ -74,30 +74,9 @@ router.get('/', async (req, res) => {
 });
 
 /**
- * Get a single execution log
- * GET /api/logs/:id
- */
-router.get('/:id', async (req, res) => {
-  try {
-    const log = await Execution.findOne({
-      _id: req.params.id,
-      portalId: req.portalId
-    });
-
-    if (!log) {
-      return res.status(404).json({ error: 'Log not found' });
-    }
-
-    res.json(log);
-  } catch (error) {
-    console.error('Get log error:', error);
-    res.status(500).json({ error: 'Failed to get log' });
-  }
-});
-
-/**
  * Get execution statistics
  * GET /api/logs/stats/summary
+ * NOTE: This route MUST be defined before /:id to prevent '/stats/summary' matching as id='stats'
  */
 router.get('/stats/summary', async (req, res) => {
   try {
@@ -228,6 +207,30 @@ router.get('/errors/recent', async (req, res) => {
   } catch (error) {
     console.error('Get recent errors:', error);
     res.status(500).json({ error: 'Failed to get recent errors' });
+  }
+});
+
+/**
+ * Get a single execution log
+ * GET /api/logs/:id
+ * NOTE: This route MUST be defined AFTER all specific routes to prevent
+ * paths like '/stats/summary' from being matched as id='stats'
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    const log = await Execution.findOne({
+      _id: req.params.id,
+      portalId: req.portalId
+    });
+
+    if (!log) {
+      return res.status(404).json({ error: 'Log not found' });
+    }
+
+    res.json(log);
+  } catch (error) {
+    console.error('Get log error:', error);
+    res.status(500).json({ error: 'Failed to get log' });
   }
 });
 

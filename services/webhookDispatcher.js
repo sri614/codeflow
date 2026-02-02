@@ -1,5 +1,101 @@
 const axios = require('axios');
 const Handlebars = require('handlebars');
+const { URL } = require('url');
+
+/**
+ * Private/internal IP ranges that should be blocked for SSRF protection
+ */
+const BLOCKED_IP_PATTERNS = [
+  /^127\./,                          // Loopback (127.0.0.0/8)
+  /^10\./,                           // Private Class A (10.0.0.0/8)
+  /^172\.(1[6-9]|2[0-9]|3[0-1])\./,  // Private Class B (172.16.0.0/12)
+  /^192\.168\./,                     // Private Class C (192.168.0.0/16)
+  /^169\.254\./,                     // Link-local (169.254.0.0/16)
+  /^0\./,                            // Current network (0.0.0.0/8)
+  /^100\.(6[4-9]|[7-9][0-9]|1[0-2][0-7])\./,  // Carrier-grade NAT (100.64.0.0/10)
+  /^192\.0\.0\./,                    // IETF Protocol Assignments (192.0.0.0/24)
+  /^192\.0\.2\./,                    // TEST-NET-1 (192.0.2.0/24)
+  /^198\.51\.100\./,                 // TEST-NET-2 (198.51.100.0/24)
+  /^203\.0\.113\./,                  // TEST-NET-3 (203.0.113.0/24)
+  /^224\./,                          // Multicast (224.0.0.0/4)
+  /^240\./,                          // Reserved (240.0.0.0/4)
+  /^255\./,                          // Broadcast
+  /^::1$/,                           // IPv6 loopback
+  /^fc00:/i,                         // IPv6 unique local
+  /^fe80:/i,                         // IPv6 link-local
+];
+
+/**
+ * Blocked hostnames for SSRF protection
+ */
+const BLOCKED_HOSTNAMES = [
+  'localhost',
+  'localhost.localdomain',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  '[::1]',
+  'metadata.google.internal',        // GCP metadata
+  '169.254.169.254',                 // AWS/Azure/GCP metadata
+  'metadata.azure.com',              // Azure metadata
+];
+
+/**
+ * Validate URL for SSRF protection
+ * @param {string} urlString - The URL to validate
+ * @returns {Object} - { valid: boolean, error?: string }
+ */
+function validateWebhookUrl(urlString) {
+  if (!urlString || typeof urlString !== 'string') {
+    return { valid: false, error: 'URL is required' };
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(urlString);
+  } catch (e) {
+    return { valid: false, error: 'Invalid URL format' };
+  }
+
+  // Only allow http and https protocols
+  if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+    return { valid: false, error: `Protocol '${parsedUrl.protocol}' is not allowed. Use http or https.` };
+  }
+
+  const hostname = parsedUrl.hostname.toLowerCase();
+
+  // Block known internal hostnames
+  if (BLOCKED_HOSTNAMES.includes(hostname)) {
+    return { valid: false, error: `Hostname '${hostname}' is not allowed for security reasons` };
+  }
+
+  // Check if hostname looks like an IP address
+  const ipv4Match = hostname.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4Match) {
+    // Check against blocked IP patterns
+    for (const pattern of BLOCKED_IP_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return { valid: false, error: `IP address '${hostname}' is in a blocked range` };
+      }
+    }
+  }
+
+  // Block IPv6 internal addresses
+  if (hostname.startsWith('[') || hostname.includes(':')) {
+    for (const pattern of BLOCKED_IP_PATTERNS) {
+      if (pattern.test(hostname)) {
+        return { valid: false, error: `IPv6 address '${hostname}' is in a blocked range` };
+      }
+    }
+  }
+
+  // Block URLs with credentials
+  if (parsedUrl.username || parsedUrl.password) {
+    return { valid: false, error: 'URLs with embedded credentials are not allowed' };
+  }
+
+  return { valid: true };
+}
 
 /**
  * Default retry configuration
@@ -115,14 +211,28 @@ function processObjectTemplates(obj, context) {
  * @param {Object} config - Webhook configuration
  * @param {Object} context - Context data from HubSpot workflow
  * @param {number} timeout - Request timeout in ms
+ * @param {boolean} skipValidation - Skip URL validation (used when called from executeWebhook which already validated)
  * @returns {Object} - Response data
  */
-async function executeSingleRequest(config, context, timeout = 30000) {
+async function executeSingleRequest(config, context, timeout = 30000, skipValidation = false) {
   const startTime = Date.now();
 
   // Process templates in URL and body
   const url = processTemplate(config.url, context);
   const method = (config.method || 'POST').toUpperCase();
+
+  // Validate URL for SSRF protection (if not already validated)
+  if (!skipValidation) {
+    const urlValidation = validateWebhookUrl(url);
+    if (!urlValidation.valid) {
+      return {
+        success: false,
+        status: 'error',
+        errorMessage: `URL validation failed: ${urlValidation.error}`,
+        executionTimeMs: Date.now() - startTime
+      };
+    }
+  }
 
   // Build headers
   const headers = {
@@ -224,6 +334,23 @@ async function executeSingleRequest(config, context, timeout = 30000) {
 async function executeWebhook(config, context, timeout = 30000, retryConfig = {}) {
   const totalStartTime = Date.now();
 
+  // Process the URL template first to get the final URL
+  const processedUrl = processTemplate(config.url, context);
+
+  // Validate URL for SSRF protection
+  const urlValidation = validateWebhookUrl(processedUrl);
+  if (!urlValidation.valid) {
+    return {
+      success: false,
+      status: 'error',
+      errorMessage: `URL validation failed: ${urlValidation.error}`,
+      executionTimeMs: Date.now() - totalStartTime,
+      totalExecutionTimeMs: Date.now() - totalStartTime,
+      attempts: [],
+      retriesUsed: 0
+    };
+  }
+
   // Merge retry config with defaults
   const retry = {
     ...DEFAULT_RETRY_CONFIG,
@@ -232,7 +359,7 @@ async function executeWebhook(config, context, timeout = 30000, retryConfig = {}
 
   // Disable retry if maxRetries is 0
   if (retry.maxRetries === 0) {
-    return executeSingleRequest(config, context, timeout);
+    return executeSingleRequest(config, context, timeout, true); // skip validation - already done
   }
 
   let lastResult = null;
@@ -246,8 +373,8 @@ async function executeWebhook(config, context, timeout = 30000, retryConfig = {}
       await sleep(delay);
     }
 
-    // Execute the request
-    const result = await executeSingleRequest(config, context, timeout);
+    // Execute the request (skip validation - already done above)
+    const result = await executeSingleRequest(config, context, timeout, true);
 
     // Track attempt info
     attempts.push({
@@ -359,5 +486,6 @@ module.exports = {
   processObjectTemplates,
   extractOutputFields,
   getValueByPath,
+  validateWebhookUrl,
   DEFAULT_RETRY_CONFIG
 };

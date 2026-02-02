@@ -3,7 +3,7 @@
   "type": "action-definition",
   "actionUrl": "https://reena-noncorroborating-readily.ngrok-free.dev/v1/actions/code",
   "published": true,
-  "objectTypes": ["CONTACT", "COMPANY", "DEAL"],
+  "objectTypes": ["CONTACT", "COMPANY", "DEAL", "TICKET"],
   "labels": {
     "en": {
       "actionName": "CodeFlow: Run Code",

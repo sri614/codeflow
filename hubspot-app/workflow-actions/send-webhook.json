@@ -91,6 +91,67 @@
           "description": "Map response fields to outputs. Example: [{\"outputFieldName\": \"userId\", \"jsonPath\": \"data.id\"}]"
         }
       }
+    },
+    {
+      "typeDefinition": {
+        "name": "retryEnabled",
+        "type": "enumeration",
+        "fieldType": "select",
+        "options": [
+          { "value": "true", "label": "Yes" },
+          { "value": "false", "label": "No" }
+        ]
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Enable Retry",
+          "description": "Automatically retry failed requests with exponential backoff. Default: Yes"
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "maxRetries",
+        "type": "enumeration",
+        "fieldType": "select",
+        "options": [
+          { "value": "1", "label": "1 retry" },
+          { "value": "2", "label": "2 retries" },
+          { "value": "3", "label": "3 retries (default)" },
+          { "value": "5", "label": "5 retries" }
+        ]
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Max Retries",
+          "description": "Maximum number of retry attempts for failed requests"
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "retryDelayMs",
+        "type": "enumeration",
+        "fieldType": "select",
+        "options": [
+          { "value": "500", "label": "500ms" },
+          { "value": "1000", "label": "1 second (default)" },
+          { "value": "2000", "label": "2 seconds" },
+          { "value": "5000", "label": "5 seconds" }
+        ]
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Initial Retry Delay",
+          "description": "Initial delay before first retry. Doubles with each attempt (exponential backoff)"
+        }
+      }
     }
   ],
   "outputFields": [
@@ -126,8 +187,20 @@
           "label": "Error Message"
         }
       }
+    },
+    {
+      "typeDefinition": {
+        "name": "codeflow_retries_used",
+        "type": "number"
+      },
+      "labels": {
+        "en": {
+          "label": "Retries Used"
+        }
+      }
     }
   ],
+  "objectTypes": ["CONTACT", "COMPANY", "DEAL", "TICKET"],
   "executionRules": [
     {
       "labelName": "Continue on success",

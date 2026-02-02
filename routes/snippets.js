@@ -4,6 +4,15 @@ const { requireAuth } = require('../middleware/auth');
 const { validateCode } = require('../services/codeExecutor');
 const Snippet = require('../models/Snippet');
 
+/**
+ * Escape special regex characters to prevent ReDoS attacks
+ * @param {string} str - The string to escape
+ * @returns {string} - Escaped string safe for use in regex
+ */
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // All routes require authentication
 router.use(requireAuth);
 
@@ -17,11 +26,12 @@ router.get('/', async (req, res) => {
 
     const query = { portalId: req.portalId, isActive: true };
 
-    // Search by name or description
+    // Search by name or description (escape regex special chars to prevent ReDoS)
     if (search) {
+      const safeSearch = escapeRegex(search);
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } }
+        { name: { $regex: safeSearch, $options: 'i' } },
+        { description: { $regex: safeSearch, $options: 'i' } }
       ];
     }
 
@@ -251,12 +261,21 @@ router.post('/:id/test', async (req, res) => {
     // Load secrets
     const secretDocs = await Secret.find({ portalId: req.portalId });
     const secrets = {};
+    const failedSecrets = [];
     for (const secret of secretDocs) {
       try {
         secrets[secret.name] = decrypt(secret.encryptedValue, secret.iv, secret.authTag);
-      } catch {
-        // Skip failed decryption
+      } catch (decryptError) {
+        console.error(`Failed to decrypt secret ${secret.name}:`, decryptError.message);
+        failedSecrets.push(secret.name);
+        // Set to null so code can detect the secret exists but failed to decrypt
+        secrets[secret.name] = null;
       }
+    }
+
+    // Log warning if any secrets failed to decrypt
+    if (failedSecrets.length > 0) {
+      console.warn(`[Portal ${req.portalId}] ${failedSecrets.length} secret(s) failed to decrypt during test: ${failedSecrets.join(', ')}`);
     }
 
     // Mock context for testing

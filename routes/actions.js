@@ -32,10 +32,11 @@ router.post('/webhook', verifyWorkflowActionSignature, async (req, res) => {
     webhookBody,
     outputMappings,
     // Retry configuration
-    retryEnabled = true,
-    maxRetries = 3,
-    initialDelayMs = 1000,
-    maxDelayMs = 10000
+    retryEnabled = 'true',
+    maxRetries = '3',
+    initialDelayMs,
+    retryDelayMs,
+    maxDelayMs = '10000'
   } = inputFields;
 
   if (!webhookUrl) {
@@ -81,11 +82,13 @@ router.post('/webhook', verifyWorkflowActionSignature, async (req, res) => {
       }
     }
 
-    // Build retry configuration
-    const retryConfig = retryEnabled ? {
+    // Build retry configuration (handle string "true"/"false" from HubSpot UI)
+    const isRetryEnabled = retryEnabled === true || retryEnabled === 'true';
+    const retryConfig = isRetryEnabled ? {
       maxRetries: parseInt(maxRetries, 10) || 3,
-      initialDelayMs: parseInt(initialDelayMs, 10) || 1000,
-      maxDelayMs: parseInt(maxDelayMs, 10) || 10000
+      initialDelayMs: parseInt(retryDelayMs || initialDelayMs, 10) || 1000,
+      maxDelayMs: parseInt(maxDelayMs, 10) || 10000,
+      backoffMultiplier: 2
     } : { maxRetries: 0 };
 
     // Execute the webhook with retry
@@ -228,6 +231,7 @@ router.post('/code', verifyWorkflowActionSignature, async (req, res) => {
     // Load secrets for this portal
     const secretDocs = await Secret.find({ portalId });
     const secrets = {};
+    const failedSecrets = [];
     for (const secret of secretDocs) {
       try {
         secrets[secret.name] = decrypt(
@@ -241,7 +245,15 @@ router.post('/code', verifyWorkflowActionSignature, async (req, res) => {
         await secret.save();
       } catch (decryptError) {
         console.error(`Failed to decrypt secret ${secret.name}:`, decryptError.message);
+        failedSecrets.push(secret.name);
+        // Set to null so code can detect the secret exists but failed to decrypt
+        secrets[secret.name] = null;
       }
+    }
+
+    // Log warning if any secrets failed to decrypt
+    if (failedSecrets.length > 0) {
+      console.warn(`[Portal ${portalId}] ${failedSecrets.length} secret(s) failed to decrypt: ${failedSecrets.join(', ')}`);
     }
 
     // Build context
@@ -342,6 +354,62 @@ router.post('/test', async (req, res) => {
 });
 
 /**
+ * Simple Code execution endpoint for testing (no auth required)
+ * POST /v1/actions/simple-code
+ */
+router.post('/simple-code', async (req, res) => {
+  console.log('Simple code execution received:', JSON.stringify(req.body, null, 2));
+
+  const {
+    code,
+    inlineCode,
+    inputs = {},
+    timeout = 10000
+  } = req.body;
+
+  const codeToExecute = code || inlineCode;
+
+  if (!codeToExecute) {
+    return res.json({
+      success: false,
+      error: 'No code provided. Send "code" or "inlineCode" in request body.'
+    });
+  }
+
+  try {
+    // Mock context for testing
+    const context = {
+      object: req.body.object || { objectType: 'contact', objectId: 'test-123' },
+      workflow: req.body.workflow || { workflowId: 'test-workflow' },
+      portalId: 'test-portal'
+    };
+
+    // Execute code
+    const result = await executeCode({
+      code: codeToExecute,
+      inputs,
+      secrets: {},
+      context,
+      timeout
+    });
+
+    res.json({
+      success: result.success,
+      output: result.output,
+      consoleOutput: result.consoleOutput,
+      executionTimeMs: result.executionTimeMs,
+      error: result.errorMessage
+    });
+  } catch (error) {
+    console.error('Code execution error:', error.message);
+    res.json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Simple Webhook endpoint for HubSpot's built-in webhook action
  * POST /v1/actions/simple-webhook
  *
@@ -349,9 +417,6 @@ router.post('/test', async (req, res) => {
  * { webhookUrl, webhookMethod, webhookBody, message, contactId, ... }
  */
 router.post('/simple-webhook', async (req, res) => {
-  const axios = require('axios');
-  const startTime = Date.now();
-
   console.log('Simple webhook received:', JSON.stringify(req.body, null, 2));
 
   const {
@@ -359,6 +424,10 @@ router.post('/simple-webhook', async (req, res) => {
     webhookMethod = 'POST',
     webhookBody,
     webhookHeaders,
+    // Retry configuration
+    retryEnabled = 'true',
+    maxRetries = '3',
+    retryDelayMs = '1000',
     ...otherData
   } = req.body;
 
@@ -374,13 +443,12 @@ router.post('/simple-webhook', async (req, res) => {
 
   try {
     // Parse headers if provided
-    let headers = { 'Content-Type': 'application/json' };
+    let headers = {};
     if (webhookHeaders) {
       try {
-        const customHeaders = typeof webhookHeaders === 'string'
+        headers = typeof webhookHeaders === 'string'
           ? JSON.parse(webhookHeaders)
           : webhookHeaders;
-        headers = { ...headers, ...customHeaders };
       } catch (e) {
         // Ignore header parse errors
       }
@@ -397,36 +465,43 @@ router.post('/simple-webhook', async (req, res) => {
     }
 
     console.log(`Sending ${webhookMethod} request to: ${webhookUrl}`);
-    console.log('Body:', JSON.stringify(body, null, 2));
 
-    // Make the external request
-    const response = await axios({
-      method: webhookMethod,
+    // Build retry configuration
+    const isRetryEnabled = retryEnabled === true || retryEnabled === 'true';
+    const retryConfig = isRetryEnabled ? {
+      maxRetries: parseInt(maxRetries, 10) || 3,
+      initialDelayMs: parseInt(retryDelayMs, 10) || 1000,
+      maxDelayMs: 10000,
+      backoffMultiplier: 2
+    } : { maxRetries: 0 };
+
+    // Execute with retry support
+    const result = await executeWebhook({
       url: webhookUrl,
-      data: body,
+      method: webhookMethod,
       headers,
-      timeout: 30000
-    });
+      body
+    }, {}, 30000, retryConfig);
 
-    const executionTime = Date.now() - startTime;
-    console.log(`Webhook response: ${response.status} in ${executionTime}ms`);
+    console.log(`Webhook response: ${result.httpStatusCode} in ${result.totalExecutionTimeMs || result.executionTimeMs}ms`);
 
     res.json({
-      success: true,
-      statusCode: response.status,
-      executionTimeMs: executionTime,
-      response: response.data
+      success: result.success,
+      statusCode: result.httpStatusCode || 0,
+      executionTimeMs: result.totalExecutionTimeMs || result.executionTimeMs,
+      retriesUsed: result.retriesUsed || 0,
+      response: result.data,
+      error: result.errorMessage
     });
   } catch (error) {
-    const executionTime = Date.now() - startTime;
     console.error('Webhook error:', error.message);
 
     res.json({
       success: false,
-      statusCode: error.response?.status || 0,
-      executionTimeMs: executionTime,
-      error: error.message,
-      response: error.response?.data
+      statusCode: 0,
+      executionTimeMs: 0,
+      retriesUsed: 0,
+      error: error.message
     });
   }
 });

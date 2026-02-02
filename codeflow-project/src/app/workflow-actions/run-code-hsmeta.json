@@ -1,0 +1,121 @@
+{
+  "uid": "codeflow_run_code",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://reena-noncorroborating-readily.ngrok-free.dev/v1/actions/code",
+    "isPublished": true,
+    "supportedClients": [
+      {
+        "client": "WORKFLOWS"
+      }
+    ],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "snippetId",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "inlineCode",
+          "type": "string",
+          "fieldType": "textarea"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "input1",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "input2",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "input3",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": {
+          "name": "codeflow_success",
+          "type": "bool"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "codeflow_error",
+          "type": "string"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "output1",
+          "type": "string"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "output2",
+          "type": "string"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "output3",
+          "type": "string"
+        }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "CodeFlow: Run Code",
+        "actionDescription": "Execute custom JavaScript code with access to workflow data and secrets",
+        "actionCardContent": "Run custom code",
+        "inputFieldLabels": {
+          "snippetId": "Snippet ID",
+          "inlineCode": "Inline Code",
+          "input1": "Input 1",
+          "input2": "Input 2",
+          "input3": "Input 3"
+        },
+        "inputFieldDescriptions": {
+          "snippetId": "The ID of a saved code snippet to execute (find in CodeFlow dashboard)",
+          "inlineCode": "JavaScript code to execute. Use 'inputs' for input fields, 'secrets' for stored secrets, 'output' for return values",
+          "input1": "Custom input available as inputs.input1 in your code",
+          "input2": "Custom input available as inputs.input2 in your code",
+          "input3": "Custom input available as inputs.input3 in your code"
+        },
+        "outputFieldLabels": {
+          "codeflow_success": "Success",
+          "codeflow_error": "Error Message",
+          "output1": "Output 1",
+          "output2": "Output 2",
+          "output3": "Output 3"
+        }
+      }
+    },
+    "objectTypes": ["CONTACT", "COMPANY", "DEAL", "TICKET"]
+  }
+}

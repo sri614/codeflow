@@ -3,11 +3,11 @@
   "type": "action-definition",
   "actionUrl": "https://reena-noncorroborating-readily.ngrok-free.dev/v1/actions/webhook",
   "published": true,
-  "objectTypes": ["CONTACT", "COMPANY", "DEAL"],
+  "objectTypes": ["CONTACT", "COMPANY", "DEAL", "TICKET"],
   "labels": {
     "en": {
       "actionName": "CodeFlow: Send Webhook",
-      "actionDescription": "Send data to an external webhook URL",
+      "actionDescription": "Send an HTTP request to any URL with dynamic data from the workflow",
       "actionCardContent": "Send webhook to {{webhookUrl}}"
     }
   },
@@ -18,12 +18,12 @@
         "type": "string",
         "fieldType": "text"
       },
-      "supportedValueTypes": ["STATIC_VALUE"],
+      "supportedValueTypes": ["STATIC_VALUE", "OBJECT_PROPERTY"],
       "isRequired": true,
       "labels": {
         "en": {
           "label": "Webhook URL",
-          "description": "The URL to send the webhook request to"
+          "description": "The URL to send the request to. Supports {{handlebars}} templates."
         }
       }
     },
@@ -32,9 +32,11 @@
         "name": "webhookMethod",
         "type": "enumeration",
         "options": [
-          {"label": "POST", "value": "POST"},
-          {"label": "GET", "value": "GET"},
-          {"label": "PUT", "value": "PUT"}
+          { "label": "POST", "value": "POST" },
+          { "label": "GET", "value": "GET" },
+          { "label": "PUT", "value": "PUT" },
+          { "label": "PATCH", "value": "PATCH" },
+          { "label": "DELETE", "value": "DELETE" }
         ]
       },
       "supportedValueTypes": ["STATIC_VALUE"],
@@ -42,7 +44,22 @@
       "labels": {
         "en": {
           "label": "HTTP Method",
-          "description": "The HTTP method (default: POST)"
+          "description": "The HTTP method to use. Defaults to POST."
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "webhookHeaders",
+        "type": "string",
+        "fieldType": "textarea"
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Headers (JSON)",
+          "description": "Custom headers as JSON object. Example: {\"Authorization\": \"Bearer {{token}}\"}"
         }
       }
     },
@@ -56,8 +73,81 @@
       "isRequired": false,
       "labels": {
         "en": {
-          "label": "Request Body",
-          "description": "JSON body to send"
+          "label": "Request Body (JSON)",
+          "description": "The request body as JSON. Supports {{handlebars}} templates. If empty, sends object data."
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "outputMappings",
+        "type": "string",
+        "fieldType": "textarea"
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Output Mappings (JSON)",
+          "description": "Map response fields to outputs. Example: [{\"outputFieldName\": \"userId\", \"jsonPath\": \"data.id\"}]"
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "retryEnabled",
+        "type": "enumeration",
+        "options": [
+          { "value": "true", "label": "Yes" },
+          { "value": "false", "label": "No" }
+        ]
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Enable Retry",
+          "description": "Automatically retry failed requests with exponential backoff. Default: Yes"
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "maxRetries",
+        "type": "enumeration",
+        "options": [
+          { "value": "1", "label": "1 retry" },
+          { "value": "2", "label": "2 retries" },
+          { "value": "3", "label": "3 retries (default)" },
+          { "value": "5", "label": "5 retries" }
+        ]
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Max Retries",
+          "description": "Maximum number of retry attempts for failed requests"
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "retryDelayMs",
+        "type": "enumeration",
+        "options": [
+          { "value": "500", "label": "500ms" },
+          { "value": "1000", "label": "1 second (default)" },
+          { "value": "2000", "label": "2 seconds" },
+          { "value": "5000", "label": "5 seconds" }
+        ]
+      },
+      "supportedValueTypes": ["STATIC_VALUE"],
+      "isRequired": false,
+      "labels": {
+        "en": {
+          "label": "Initial Retry Delay",
+          "description": "Initial delay before first retry. Doubles with each attempt (exponential backoff)"
         }
       }
     }
@@ -76,12 +166,34 @@
     },
     {
       "typeDefinition": {
+        "name": "codeflow_status_code",
+        "type": "number"
+      },
+      "labels": {
+        "en": {
+          "label": "HTTP Status Code"
+        }
+      }
+    },
+    {
+      "typeDefinition": {
         "name": "codeflow_error",
         "type": "string"
       },
       "labels": {
         "en": {
           "label": "Error Message"
+        }
+      }
+    },
+    {
+      "typeDefinition": {
+        "name": "codeflow_retries_used",
+        "type": "number"
+      },
+      "labels": {
+        "en": {
+          "label": "Retries Used"
         }
       }
     }

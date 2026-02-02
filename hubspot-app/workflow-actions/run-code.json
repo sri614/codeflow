@@ -143,6 +143,7 @@
       }
     }
   ],
+  "objectTypes": ["CONTACT", "COMPANY", "DEAL", "TICKET"],
   "executionRules": [
     {
       "labelName": "Continue on success",

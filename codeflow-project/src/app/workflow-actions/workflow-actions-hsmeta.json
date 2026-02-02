@@ -28,6 +28,7 @@
             { "value": "POST", "label": "POST" },
             { "value": "GET", "label": "GET" },
             { "value": "PUT", "label": "PUT" },
+            { "value": "PATCH", "label": "PATCH" },
             { "value": "DELETE", "label": "DELETE" }
           ]
         },
@@ -39,6 +40,49 @@
           "name": "webhookBody",
           "type": "string",
           "fieldType": "textarea"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "retryEnabled",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "true", "label": "Yes" },
+            { "value": "false", "label": "No" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "maxRetries",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "1", "label": "1 retry" },
+            { "value": "2", "label": "2 retries" },
+            { "value": "3", "label": "3 retries (default)" },
+            { "value": "5", "label": "5 retries" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "retryDelayMs",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "500", "label": "500ms" },
+            { "value": "1000", "label": "1 second (default)" },
+            { "value": "2000", "label": "2 seconds" },
+            { "value": "5000", "label": "5 seconds" }
+          ]
         },
         "supportedValueTypes": ["STATIC_VALUE"],
         "isRequired": false
@@ -62,6 +106,12 @@
           "name": "error",
           "type": "string"
         }
+      },
+      {
+        "typeDefinition": {
+          "name": "retriesUsed",
+          "type": "number"
+        }
       }
     ],
     "labels": {
@@ -72,20 +122,27 @@
         "inputFieldLabels": {
           "webhookUrl": "Webhook URL",
           "webhookMethod": "HTTP Method",
-          "webhookBody": "Request Body (JSON)"
+          "webhookBody": "Request Body (JSON)",
+          "retryEnabled": "Enable Retry",
+          "maxRetries": "Max Retries",
+          "retryDelayMs": "Initial Retry Delay"
         },
         "inputFieldDescriptions": {
           "webhookUrl": "The URL to send the webhook request to",
           "webhookMethod": "The HTTP method to use (default: POST)",
-          "webhookBody": "Custom JSON body to send with the request"
+          "webhookBody": "Custom JSON body to send with the request",
+          "retryEnabled": "Automatically retry failed requests with exponential backoff",
+          "maxRetries": "Maximum number of retry attempts",
+          "retryDelayMs": "Initial delay before first retry (doubles with each attempt)"
         },
         "outputFieldLabels": {
           "success": "Success",
           "statusCode": "HTTP Status Code",
-          "error": "Error Message"
+          "error": "Error Message",
+          "retriesUsed": "Retries Used"
         }
       }
     },
-    "objectTypes": ["CONTACT", "COMPANY", "DEAL"]
+    "objectTypes": ["CONTACT", "COMPANY", "DEAL", "TICKET"]
   }
 }
