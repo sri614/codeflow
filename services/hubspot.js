@@ -37,19 +37,30 @@ function getAuthorizationUrl(state) {
  * @returns {Object} - Token response
  */
 async function exchangeCodeForTokens(code) {
-  const response = await axios.post(HUBSPOT_OAUTH_URL, new URLSearchParams({
-    grant_type: 'authorization_code',
-    client_id: process.env.HUBSPOT_CLIENT_ID,
-    client_secret: process.env.HUBSPOT_CLIENT_SECRET,
-    redirect_uri: `${process.env.BASE_URL}/oauth/callback`,
-    code
-  }), {
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded'
-    }
-  });
+  const redirectUri = `${process.env.BASE_URL}/oauth/callback`;
+  console.log('Exchanging code for tokens...');
+  console.log('Redirect URI:', redirectUri);
+  console.log('Client ID:', process.env.HUBSPOT_CLIENT_ID);
 
-  return response.data;
+  try {
+    const response = await axios.post(HUBSPOT_OAUTH_URL, new URLSearchParams({
+      grant_type: 'authorization_code',
+      client_id: process.env.HUBSPOT_CLIENT_ID,
+      client_secret: process.env.HUBSPOT_CLIENT_SECRET,
+      redirect_uri: redirectUri,
+      code
+    }), {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      }
+    });
+
+    console.log('Token exchange successful');
+    return response.data;
+  } catch (error) {
+    console.error('Token exchange failed:', error.response?.data || error.message);
+    throw error;
+  }
 }
 
 /**

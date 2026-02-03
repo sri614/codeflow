@@ -1,5 +1,6 @@
 // Use environment variable or default to proxy
 const API_BASE = import.meta.env.VITE_API_URL || ''
+console.log('API Base URL:', API_BASE)
 
 // Token management
 export function getToken() {
@@ -19,7 +20,8 @@ export const api = {
   async request(method, path, data = null) {
     const token = getToken()
     const headers = {
-      'Content-Type': 'application/json'
+      'Content-Type': 'application/json',
+      'ngrok-skip-browser-warning': 'true'  // Skip ngrok warning page
     }
 
     if (token) {
@@ -35,21 +37,29 @@ export const api = {
       options.body = JSON.stringify(data)
     }
 
-    const response = await fetch(`${API_BASE}${path}`, options)
+    const url = `${API_BASE}${path}`
+    console.log(`API Request: ${method} ${url}`)
 
-    if (response.status === 401) {
-      setToken(null)
-      window.location.href = '/oauth/authorize'
-      throw new Error('Unauthorized')
+    try {
+      const response = await fetch(url, options)
+      console.log(`API Response: ${response.status}`)
+
+      if (response.status === 401) {
+        setToken(null)
+        throw new Error('Unauthorized')
+      }
+
+      const json = await response.json()
+
+      if (!response.ok) {
+        throw new Error(json.error || 'Request failed')
+      }
+
+      return { data: json, status: response.status }
+    } catch (error) {
+      console.error('API Error:', error)
+      throw error
     }
-
-    const json = await response.json()
-
-    if (!response.ok) {
-      throw new Error(json.error || 'Request failed')
-    }
-
-    return { data: json, status: response.status }
   },
 
   get(path) {

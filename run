@@ -42,3 +42,12 @@ Commands to Run Tomorrow (Every Time You Start)
 
   ---
   Now go check HubSpot workflows and search for "CodeFlow"! 🎉
+  
+
+  
+  1. Send Webhook Action:
+    - URL: https://httpbin.org/post
+    - Method: POST
+    - Body: {"test": "data"}
+  2. Run Code Action:
+    - Inline Code: output.output1 = 'Success!';

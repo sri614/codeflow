@@ -18,18 +18,23 @@ const PORT = process.env.PORT || 3000;
 // Connect to MongoDB
 connectDB();
 
-// CORS configuration for HubSpot domains
+// CORS configuration for HubSpot domains and local development
 const corsOptions = {
   origin: [
     'https://app.hubspot.com',
     'https://app-eu1.hubspot.com',
     'https://app-na1.hubspot.com',
     /\.hubspot\.com$/,
-    process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : null
+    /\.ngrok-free\.dev$/,
+    /\.ngrok\.io$/,
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'http://127.0.0.1:5173',
+    process.env.BASE_URL
   ].filter(Boolean),
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-HubSpot-Signature', 'X-HubSpot-Signature-Version']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-HubSpot-Signature', 'X-HubSpot-Signature-Version', 'ngrok-skip-browser-warning']
 };
 
 app.use(cors(corsOptions));

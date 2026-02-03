@@ -241,24 +241,32 @@ async function executeSingleRequest(config, context, timeout = 30000, skipValida
     ...(config.headers ? processObjectTemplates(config.headers, context) : {})
   };
 
-  // Build request body for methods that support it
+  // Build request body
   let data = null;
-  if (['POST', 'PUT', 'PATCH'].includes(method) && config.body) {
+  let params = config.params ? processObjectTemplates(config.params, context) : undefined;
+
+  if (config.body) {
+    let processedBody;
     if (typeof config.body === 'string') {
       // Try to parse as JSON template
       const processed = processTemplate(config.body, context);
       try {
-        data = JSON.parse(processed);
+        processedBody = JSON.parse(processed);
       } catch {
-        data = processed;
+        processedBody = processed;
       }
     } else {
-      data = processObjectTemplates(config.body, context);
+      processedBody = processObjectTemplates(config.body, context);
+    }
+
+    // For GET requests, convert body to query parameters
+    if (method === 'GET' && typeof processedBody === 'object') {
+      params = { ...params, ...processedBody };
+    } else {
+      // POST, PUT, PATCH, DELETE - send body in request body
+      data = processedBody;
     }
   }
-
-  // Build query params
-  const params = config.params ? processObjectTemplates(config.params, context) : undefined;
 
   let error = null;
   try {

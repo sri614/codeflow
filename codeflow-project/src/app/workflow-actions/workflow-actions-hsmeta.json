@@ -46,6 +46,24 @@
       },
       {
         "typeDefinition": {
+          "name": "webhookHeaders",
+          "type": "string",
+          "fieldType": "textarea"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "webhookParams",
+          "type": "string",
+          "fieldType": "textarea"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
           "name": "retryEnabled",
           "type": "enumeration",
           "fieldType": "select",
@@ -103,6 +121,12 @@
       },
       {
         "typeDefinition": {
+          "name": "response",
+          "type": "string"
+        }
+      },
+      {
+        "typeDefinition": {
           "name": "error",
           "type": "string"
         }
@@ -110,6 +134,12 @@
       {
         "typeDefinition": {
           "name": "retriesUsed",
+          "type": "number"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "executionTimeMs",
           "type": "number"
         }
       }
@@ -123,6 +153,8 @@
           "webhookUrl": "Webhook URL",
           "webhookMethod": "HTTP Method",
           "webhookBody": "Request Body (JSON)",
+          "webhookHeaders": "Custom Headers (JSON)",
+          "webhookParams": "Query Parameters (JSON)",
           "retryEnabled": "Enable Retry",
           "maxRetries": "Max Retries",
           "retryDelayMs": "Initial Retry Delay"
@@ -130,7 +162,9 @@
         "inputFieldDescriptions": {
           "webhookUrl": "The URL to send the webhook request to",
           "webhookMethod": "The HTTP method to use (default: POST)",
-          "webhookBody": "Custom JSON body to send with the request",
+          "webhookBody": "Custom JSON body to send with the request (for POST/PUT/PATCH/DELETE)",
+          "webhookHeaders": "Custom headers as JSON object, e.g., {\"Authorization\": \"Bearer token\"}",
+          "webhookParams": "Query parameters as JSON object, e.g., {\"page\": \"1\", \"limit\": \"10\"}",
           "retryEnabled": "Automatically retry failed requests with exponential backoff",
           "maxRetries": "Maximum number of retry attempts",
           "retryDelayMs": "Initial delay before first retry (doubles with each attempt)"
@@ -138,8 +172,10 @@
         "outputFieldLabels": {
           "success": "Success",
           "statusCode": "HTTP Status Code",
+          "response": "Response Data",
           "error": "Error Message",
-          "retriesUsed": "Retries Used"
+          "retriesUsed": "Retries Used",
+          "executionTimeMs": "Execution Time (ms)"
         }
       }
     },

@@ -413,23 +413,31 @@ router.post('/simple-code', async (req, res) => {
  * Simple Webhook endpoint for HubSpot's built-in webhook action
  * POST /v1/actions/simple-webhook
  *
- * This endpoint accepts a simpler format:
- * { webhookUrl, webhookMethod, webhookBody, message, contactId, ... }
+ * This endpoint accepts HubSpot workflow action format:
+ * { callbackId, origin, context, object, fields, inputFields, typedInputs }
  */
 router.post('/simple-webhook', async (req, res) => {
   console.log('Simple webhook received:', JSON.stringify(req.body, null, 2));
+
+  // HubSpot sends webhook config inside inputFields or fields
+  const inputFields = req.body.inputFields || req.body.fields || req.body;
+  console.log('Extracted inputFields:', JSON.stringify(inputFields, null, 2));
 
   const {
     webhookUrl,
     webhookMethod = 'POST',
     webhookBody,
     webhookHeaders,
+    webhookParams,  // Query parameters for GET requests
     // Retry configuration
     retryEnabled = 'true',
     maxRetries = '3',
     retryDelayMs = '1000',
     ...otherData
-  } = req.body;
+  } = inputFields;
+
+  const method = (webhookMethod || 'POST').toUpperCase();
+  console.log(`Webhook URL: ${webhookUrl}, Method: ${method}`);
 
   // If no webhookUrl provided, just echo back the received data
   if (!webhookUrl) {
@@ -454,17 +462,33 @@ router.post('/simple-webhook', async (req, res) => {
       }
     }
 
+    // Parse query parameters if provided
+    let params = null;
+    if (webhookParams) {
+      try {
+        params = typeof webhookParams === 'string'
+          ? JSON.parse(webhookParams)
+          : webhookParams;
+      } catch (e) {
+        // Ignore parse errors
+      }
+    }
+
     // Parse body - use webhookBody if provided, otherwise send otherData
-    let body = otherData;
+    let body = null;
     if (webhookBody) {
       try {
         body = typeof webhookBody === 'string' ? JSON.parse(webhookBody) : webhookBody;
       } catch (e) {
-        body = { data: webhookBody, ...otherData };
+        body = { data: webhookBody };
       }
+    } else if (Object.keys(otherData).length > 0) {
+      body = otherData;
     }
 
-    console.log(`Sending ${webhookMethod} request to: ${webhookUrl}`);
+    console.log(`Sending ${method} request to: ${webhookUrl}`);
+    if (body) console.log(`Request body:`, JSON.stringify(body, null, 2));
+    if (params) console.log(`Query params:`, JSON.stringify(params, null, 2));
 
     // Build retry configuration
     const isRetryEnabled = retryEnabled === true || retryEnabled === 'true';
@@ -478,19 +502,26 @@ router.post('/simple-webhook', async (req, res) => {
     // Execute with retry support
     const result = await executeWebhook({
       url: webhookUrl,
-      method: webhookMethod,
+      method: method,
       headers,
-      body
+      body,
+      params
     }, {}, 30000, retryConfig);
 
     console.log(`Webhook response: ${result.httpStatusCode} in ${result.totalExecutionTimeMs || result.executionTimeMs}ms`);
+    if (result.data) console.log(`Response data:`, typeof result.data === 'object' ? JSON.stringify(result.data, null, 2) : result.data);
+
+    // Convert response to string for HubSpot output field compatibility
+    const responseStr = result.data
+      ? (typeof result.data === 'object' ? JSON.stringify(result.data) : String(result.data))
+      : null;
 
     res.json({
       success: result.success,
       statusCode: result.httpStatusCode || 0,
       executionTimeMs: result.totalExecutionTimeMs || result.executionTimeMs,
       retriesUsed: result.retriesUsed || 0,
-      response: result.data,
+      response: responseStr,
       error: result.errorMessage
     });
   } catch (error) {
