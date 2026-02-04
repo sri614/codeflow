@@ -1,0 +1,146 @@
+{
+  "uid": "codeflow_format_data",
+  "type": "workflow-action",
+  "config": {
+    "actionUrl": "https://reena-noncorroborating-readily.ngrok-free.dev/v1/actions/format",
+    "isPublished": true,
+    "supportedClients": [
+      {
+        "client": "WORKFLOWS"
+      }
+    ],
+    "inputFields": [
+      {
+        "typeDefinition": {
+          "name": "operation",
+          "type": "enumeration",
+          "fieldType": "select",
+          "options": [
+            { "value": "uppercase", "label": "Text: UPPERCASE" },
+            { "value": "lowercase", "label": "Text: lowercase" },
+            { "value": "capitalize", "label": "Text: Capitalize Each Word" },
+            { "value": "trim", "label": "Text: Trim Whitespace" },
+            { "value": "concat", "label": "Text: Concatenate" },
+            { "value": "substring", "label": "Text: Extract Substring" },
+            { "value": "replace", "label": "Text: Find & Replace" },
+            { "value": "split", "label": "Text: Split by Delimiter" },
+            { "value": "length", "label": "Text: Get Length" },
+            { "value": "number_format", "label": "Number: Format with Decimals" },
+            { "value": "currency", "label": "Number: Format as Currency" },
+            { "value": "percentage", "label": "Number: Format as Percentage" },
+            { "value": "round", "label": "Number: Round" },
+            { "value": "floor", "label": "Number: Round Down" },
+            { "value": "ceil", "label": "Number: Round Up" },
+            { "value": "abs", "label": "Number: Absolute Value" },
+            { "value": "add", "label": "Math: Add" },
+            { "value": "subtract", "label": "Math: Subtract" },
+            { "value": "multiply", "label": "Math: Multiply" },
+            { "value": "divide", "label": "Math: Divide" },
+            { "value": "date_format", "label": "Date: Format" },
+            { "value": "date_add", "label": "Date: Add Days" },
+            { "value": "date_subtract", "label": "Date: Subtract Days" },
+            { "value": "date_diff", "label": "Date: Days Between" },
+            { "value": "now", "label": "Date: Current Date/Time" },
+            { "value": "json_get", "label": "JSON: Get Value" },
+            { "value": "json_stringify", "label": "JSON: Convert to String" },
+            { "value": "json_parse", "label": "JSON: Parse String" },
+            { "value": "default_value", "label": "Logic: Default Value (if empty)" },
+            { "value": "conditional", "label": "Logic: If/Then/Else" }
+          ]
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "input1",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": true
+      },
+      {
+        "typeDefinition": {
+          "name": "input2",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "input3",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["OBJECT_PROPERTY"],
+        "isRequired": false
+      },
+      {
+        "typeDefinition": {
+          "name": "formatOptions",
+          "type": "string",
+          "fieldType": "text"
+        },
+        "supportedValueTypes": ["STATIC_VALUE"],
+        "isRequired": false
+      }
+    ],
+    "outputFields": [
+      {
+        "typeDefinition": {
+          "name": "codeflow_success",
+          "type": "bool"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "codeflow_error",
+          "type": "string"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "result",
+          "type": "string"
+        }
+      },
+      {
+        "typeDefinition": {
+          "name": "result_number",
+          "type": "number"
+        }
+      }
+    ],
+    "labels": {
+      "en": {
+        "actionName": "CodeFlow: Format Data",
+        "actionDescription": "Format and transform data - text, numbers, dates, and calculations",
+        "actionCardContent": "Format data: {{operation}}",
+        "inputFieldLabels": {
+          "operation": "Operation",
+          "input1": "Input Value",
+          "input2": "Second Value / Parameter",
+          "input3": "Third Value / Parameter",
+          "formatOptions": "Format Options"
+        },
+        "inputFieldDescriptions": {
+          "operation": "The formatting operation to perform",
+          "input1": "The primary value to format or transform",
+          "input2": "Second value for operations like concat, math, find/replace, etc.",
+          "input3": "Third value for operations like conditional (else value), replace (replacement), etc.",
+          "formatOptions": "Additional options: decimal places (2), currency code (USD), date format (YYYY-MM-DD), etc."
+        },
+        "outputFieldLabels": {
+          "codeflow_success": "Success",
+          "codeflow_error": "Error Message",
+          "result": "Formatted Result",
+          "result_number": "Result (Number)"
+        }
+      }
+    },
+    "objectTypes": ["CONTACT", "COMPANY", "DEAL", "TICKET"]
+  }
+}

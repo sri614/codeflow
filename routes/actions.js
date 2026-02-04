@@ -341,6 +341,431 @@ router.post('/code', verifyWorkflowActionSignature, async (req, res) => {
 });
 
 /**
+ * Format Data Action
+ * POST /v1/actions/format
+ */
+router.post('/format', verifyWorkflowActionSignature, async (req, res) => {
+  const startTime = Date.now();
+  const { portalId, callbackId } = req;
+
+  const {
+    inputFields = {},
+    object = {},
+    workflow = {}
+  } = req.body;
+
+  const {
+    operation,
+    input1,
+    input2,
+    input3,
+    formatOptions
+  } = inputFields;
+
+  if (!operation) {
+    return res.json({
+      outputFields: {
+        codeflow_success: false,
+        codeflow_error: 'No operation specified'
+      }
+    });
+  }
+
+  try {
+    let result;
+    let resultNumber = null;
+
+    switch (operation) {
+      // Text Operations
+      case 'uppercase':
+        result = String(input1 || '').toUpperCase();
+        break;
+
+      case 'lowercase':
+        result = String(input1 || '').toLowerCase();
+        break;
+
+      case 'capitalize':
+        result = String(input1 || '').replace(/\b\w/g, char => char.toUpperCase());
+        break;
+
+      case 'trim':
+        result = String(input1 || '').trim();
+        break;
+
+      case 'concat':
+        result = String(input1 || '') + String(input2 || '') + String(input3 || '');
+        break;
+
+      case 'substring': {
+        const str = String(input1 || '');
+        const start = parseInt(input2, 10) || 0;
+        const length = input3 ? parseInt(input3, 10) : undefined;
+        result = length !== undefined ? str.substring(start, start + length) : str.substring(start);
+        break;
+      }
+
+      case 'replace':
+        result = String(input1 || '').split(String(input2 || '')).join(String(input3 || ''));
+        break;
+
+      case 'split': {
+        const delimiter = input2 || ',';
+        const index = parseInt(input3, 10);
+        const parts = String(input1 || '').split(delimiter);
+        result = !isNaN(index) ? (parts[index] || '') : parts.join('|');
+        break;
+      }
+
+      case 'length':
+        result = String(input1 || '').length.toString();
+        resultNumber = String(input1 || '').length;
+        break;
+
+      // Number Operations
+      case 'number_format': {
+        const num = parseFloat(input1);
+        if (isNaN(num)) {
+          result = input1;
+        } else {
+          const decimals = parseInt(formatOptions || input2, 10) || 2;
+          result = num.toFixed(decimals);
+          resultNumber = parseFloat(result);
+        }
+        break;
+      }
+
+      case 'currency': {
+        const num = parseFloat(input1);
+        if (isNaN(num)) {
+          result = input1;
+        } else {
+          const currency = formatOptions || input2 || 'USD';
+          const locale = input3 || 'en-US';
+          try {
+            result = new Intl.NumberFormat(locale, {
+              style: 'currency',
+              currency: currency
+            }).format(num);
+          } catch {
+            result = `${currency} ${num.toFixed(2)}`;
+          }
+          resultNumber = num;
+        }
+        break;
+      }
+
+      case 'percentage': {
+        const num = parseFloat(input1);
+        if (isNaN(num)) {
+          result = input1;
+        } else {
+          const decimals = parseInt(formatOptions || input2, 10) || 0;
+          const percentage = num * 100;
+          result = percentage.toFixed(decimals) + '%';
+          resultNumber = percentage;
+        }
+        break;
+      }
+
+      case 'round': {
+        const num = parseFloat(input1);
+        if (isNaN(num)) {
+          result = input1;
+        } else {
+          const decimals = parseInt(formatOptions || input2, 10) || 0;
+          const factor = Math.pow(10, decimals);
+          resultNumber = Math.round(num * factor) / factor;
+          result = resultNumber.toString();
+        }
+        break;
+      }
+
+      case 'floor': {
+        const num = parseFloat(input1);
+        resultNumber = isNaN(num) ? 0 : Math.floor(num);
+        result = resultNumber.toString();
+        break;
+      }
+
+      case 'ceil': {
+        const num = parseFloat(input1);
+        resultNumber = isNaN(num) ? 0 : Math.ceil(num);
+        result = resultNumber.toString();
+        break;
+      }
+
+      case 'abs': {
+        const num = parseFloat(input1);
+        resultNumber = isNaN(num) ? 0 : Math.abs(num);
+        result = resultNumber.toString();
+        break;
+      }
+
+      // Math Operations
+      case 'add': {
+        const num1 = parseFloat(input1) || 0;
+        const num2 = parseFloat(input2) || 0;
+        resultNumber = num1 + num2;
+        result = resultNumber.toString();
+        break;
+      }
+
+      case 'subtract': {
+        const num1 = parseFloat(input1) || 0;
+        const num2 = parseFloat(input2) || 0;
+        resultNumber = num1 - num2;
+        result = resultNumber.toString();
+        break;
+      }
+
+      case 'multiply': {
+        const num1 = parseFloat(input1) || 0;
+        const num2 = parseFloat(input2) || 0;
+        resultNumber = num1 * num2;
+        result = resultNumber.toString();
+        break;
+      }
+
+      case 'divide': {
+        const num1 = parseFloat(input1) || 0;
+        const num2 = parseFloat(input2);
+        if (isNaN(num2) || num2 === 0) {
+          return res.json({
+            outputFields: {
+              codeflow_success: false,
+              codeflow_error: 'Cannot divide by zero or invalid divisor'
+            }
+          });
+        }
+        resultNumber = num1 / num2;
+        result = resultNumber.toString();
+        break;
+      }
+
+      // Date Operations
+      case 'date_format': {
+        const date = input1 ? new Date(input1) : new Date();
+        if (isNaN(date.getTime())) {
+          result = input1;
+        } else {
+          const format = formatOptions || input2 || 'YYYY-MM-DD';
+          result = formatDate(date, format);
+        }
+        break;
+      }
+
+      case 'date_add': {
+        const date = input1 ? new Date(input1) : new Date();
+        const days = parseInt(input2, 10) || 0;
+        if (isNaN(date.getTime())) {
+          result = input1;
+        } else {
+          date.setDate(date.getDate() + days);
+          const format = formatOptions || input3 || 'YYYY-MM-DD';
+          result = formatDate(date, format);
+        }
+        break;
+      }
+
+      case 'date_subtract': {
+        const date = input1 ? new Date(input1) : new Date();
+        const days = parseInt(input2, 10) || 0;
+        if (isNaN(date.getTime())) {
+          result = input1;
+        } else {
+          date.setDate(date.getDate() - days);
+          const format = formatOptions || input3 || 'YYYY-MM-DD';
+          result = formatDate(date, format);
+        }
+        break;
+      }
+
+      case 'date_diff': {
+        const date1 = new Date(input1);
+        const date2 = input2 ? new Date(input2) : new Date();
+        if (isNaN(date1.getTime()) || isNaN(date2.getTime())) {
+          result = '0';
+          resultNumber = 0;
+        } else {
+          const diffTime = Math.abs(date2 - date1);
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          resultNumber = diffDays;
+          result = diffDays.toString();
+        }
+        break;
+      }
+
+      case 'now': {
+        const format = formatOptions || input1 || 'YYYY-MM-DD HH:mm:ss';
+        result = formatDate(new Date(), format);
+        break;
+      }
+
+      // JSON Operations
+      case 'json_get': {
+        try {
+          const obj = typeof input1 === 'string' ? JSON.parse(input1) : input1;
+          const path = input2 || '';
+          result = getNestedValue(obj, path);
+          if (typeof result === 'object') {
+            result = JSON.stringify(result);
+          } else {
+            result = String(result);
+          }
+          if (!isNaN(parseFloat(result))) {
+            resultNumber = parseFloat(result);
+          }
+        } catch {
+          result = '';
+        }
+        break;
+      }
+
+      case 'json_stringify':
+        try {
+          result = JSON.stringify(typeof input1 === 'string' ? JSON.parse(input1) : input1);
+        } catch {
+          result = String(input1);
+        }
+        break;
+
+      case 'json_parse':
+        try {
+          const parsed = JSON.parse(input1);
+          result = JSON.stringify(parsed);
+        } catch {
+          result = input1;
+        }
+        break;
+
+      // Logic Operations
+      case 'default_value':
+        result = (input1 !== null && input1 !== undefined && input1 !== '')
+          ? String(input1)
+          : String(input2 || '');
+        break;
+
+      case 'conditional': {
+        // input1 = condition value, input2 = then value, input3 = else value
+        const isTruthy = input1 && input1 !== 'false' && input1 !== '0' && input1 !== 'null' && input1 !== 'undefined';
+        result = isTruthy ? String(input2 || '') : String(input3 || '');
+        break;
+      }
+
+      default:
+        return res.json({
+          outputFields: {
+            codeflow_success: false,
+            codeflow_error: `Unknown operation: ${operation}`
+          }
+        });
+    }
+
+    // Log execution
+    await Execution.create({
+      portalId,
+      actionType: 'format',
+      workflowId: workflow.workflowId,
+      enrollmentId: callbackId,
+      objectType: object.objectType,
+      objectId: object.objectId,
+      status: 'success',
+      executionTimeMs: Date.now() - startTime,
+      inputData: { operation, input1, input2, input3, formatOptions },
+      outputData: { result, result_number: resultNumber }
+    });
+
+    // Record usage
+    await Usage.recordExecution(portalId, {
+      actionType: 'format',
+      status: 'success',
+      executionTimeMs: Date.now() - startTime,
+      workflowId: workflow.workflowId
+    });
+
+    res.json({
+      outputFields: {
+        codeflow_success: true,
+        result: result,
+        result_number: resultNumber
+      }
+    });
+  } catch (error) {
+    console.error('Format action error:', error);
+
+    await Execution.create({
+      portalId,
+      actionType: 'format',
+      workflowId: workflow?.workflowId,
+      status: 'error',
+      executionTimeMs: Date.now() - startTime,
+      errorMessage: error.message
+    });
+
+    res.json({
+      outputFields: {
+        codeflow_success: false,
+        codeflow_error: error.message
+      }
+    });
+  }
+});
+
+// Helper function to format dates
+function formatDate(date, format) {
+  const pad = (n, len = 2) => String(n).padStart(len, '0');
+
+  const replacements = {
+    'YYYY': date.getFullYear(),
+    'YY': String(date.getFullYear()).slice(-2),
+    'MM': pad(date.getMonth() + 1),
+    'M': date.getMonth() + 1,
+    'DD': pad(date.getDate()),
+    'D': date.getDate(),
+    'HH': pad(date.getHours()),
+    'H': date.getHours(),
+    'hh': pad(date.getHours() % 12 || 12),
+    'h': date.getHours() % 12 || 12,
+    'mm': pad(date.getMinutes()),
+    'm': date.getMinutes(),
+    'ss': pad(date.getSeconds()),
+    's': date.getSeconds(),
+    'A': date.getHours() >= 12 ? 'PM' : 'AM',
+    'a': date.getHours() >= 12 ? 'pm' : 'am'
+  };
+
+  let result = format;
+  for (const [token, value] of Object.entries(replacements)) {
+    result = result.replace(new RegExp(token, 'g'), value);
+  }
+  return result;
+}
+
+// Helper function to get nested value from object
+function getNestedValue(obj, path) {
+  if (!path) return obj;
+  const keys = path.split('.');
+  let value = obj;
+  for (const key of keys) {
+    if (value === null || value === undefined) return '';
+    // Handle array index
+    const arrayMatch = key.match(/^(\w+)\[(\d+)\]$/);
+    if (arrayMatch) {
+      value = value[arrayMatch[1]];
+      if (Array.isArray(value)) {
+        value = value[parseInt(arrayMatch[2], 10)];
+      } else {
+        return '';
+      }
+    } else {
+      value = value[key];
+    }
+  }
+  return value !== undefined ? value : '';
+}
+
+/**
  * Test endpoint for debugging
  * POST /v1/actions/test
  */

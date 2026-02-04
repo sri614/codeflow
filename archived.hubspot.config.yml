@@ -1,0 +1,5 @@
+defaultPortal: prod
+portals:
+  - name: prod
+    portalId: 50948254
+    authType: personalaccesskey
